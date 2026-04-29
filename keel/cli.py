@@ -7,30 +7,53 @@ from .config import init_config, set_config, get_config, get_all_config
 from .db import get_schema_path
 import sqlite3
 from pathlib import Path
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.rule import Rule
+from rich.progress import Progress, SpinnerColumn, TextColumn
+import rich.box
 
-@click.group()
+console = Console()
+
+class KeelGroup(click.Group):
+    def format_help(self, ctx, formatter):
+        console.print()
+        console.print(r"[cyan]   / ___        ___          ___         //  [/cyan]")
+        console.print(r"[cyan]  //\ \       //___) )     //___) )     //   [/cyan]")
+        console.print(r"[cyan] //  \ \     //           //           //    [/cyan]")
+        console.print(r"[cyan]//    \ \   ((____       ((____       //     [/cyan]")
+        console.print()
+        super().format_help(ctx, formatter)
+
+@click.group(cls=KeelGroup)
 def cli():
     """keel: a CLI tool that wraps coding agents via git hooks to inject architectural memory."""
     pass
 
 def echo_brand(msg, bold=False):
-    click.secho("keel", fg="cyan", bold=True, nl=False)
-    click.echo(f" | {msg}")
+    console.print(f"[cyan bold]keel[/cyan bold] | {msg}")
 
 @cli.command()
 def init():
     """Initialize keel in the current git repository."""
     try:
-        install_hooks()
-        init_config()
-        # Init DB as well
-        keel_dir = Path('.keel')
-        db_path = keel_dir / 'memory.db'
-        from .db import init_db
-        init_db(str(db_path))
-        echo_brand("Initialized successfully. Hooks installed.")
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
+            progress.add_task(description="Creating .keel directory, database, and hooks...", total=None)
+            install_hooks()
+            init_config()
+            # Init DB as well
+            keel_dir = Path('.keel')
+            db_path = keel_dir / 'memory.db'
+            from .db import init_db
+            init_db(str(db_path))
+            
+        console.print(Panel(
+            "✓ Keel harness initialised in [cyan].keel[/cyan]\n\n[dim]Installed git hooks for automatic extraction.[/dim]\n[dim]Errors are logged to .keel/errors.log[/dim]",
+            title="Success", border_style="green"
+        ))
     except Exception as e:
-        click.secho(f"Error: {e}", fg="red", err=True)
+        console.print(f"[red]Error: {e}[/red]")
         raise click.Abort()
 
 @cli.command()
@@ -40,29 +63,47 @@ def init():
 @click.option('--gemini-key', help='Gemini API key')
 @click.option('--groq-key', help='Groq API key')
 @click.option('--model', help='Model to use (default: claude-sonnet-4-6)')
-def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model):
+@click.option('--show', is_flag=True, help='Show current configuration')
+def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, show):
     """Set keel configuration."""
-    if api_key:
-        set_config('api_key', api_key)
-        echo_brand("Anthropic key saved.")
-    if openai_key:
-        set_config('openai_key', openai_key)
-        echo_brand("OpenAI key saved.")
-    if openrouter_key:
-        set_config('openrouter_key', openrouter_key)
-        echo_brand("OpenRouter key saved.")
-    if gemini_key:
-        set_config('gemini_key', gemini_key)
-        echo_brand("Gemini key saved.")
-    if groq_key:
-        set_config('groq_key', groq_key)
-        echo_brand("Groq key saved.")
-    if model:
-        set_config('model', model)
-        echo_brand(f"Model set to {click.style(model, fg='blue', bold=True)}.")
-    if not any([api_key, openai_key, openrouter_key, gemini_key, groq_key, model]):
-        click.secho("Usage: ", nl=False, fg="yellow")
-        click.echo("keel config --api-key ... --openai-key ... --model ...")
+    if show:
+        cfg = get_all_config()
+        table = Table(title="Keel Configuration", box=rich.box.SIMPLE)
+        table.add_column("Key", style="cyan")
+        table.add_column("Value", style="green")
+        for k, v in cfg.items():
+            if 'key' in k and v:
+                v = v[:4] + '*' * (len(v) - 8) + v[-4:] if len(v) > 8 else '*' * len(v)
+            table.add_row(k, v)
+        console.print(table)
+        return
+
+    changes = False
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
+        task = progress.add_task(description="Saving configuration...", total=None)
+        if api_key:
+            set_config('api_key', api_key)
+            changes = True
+        if openai_key:
+            set_config('openai_key', openai_key)
+            changes = True
+        if openrouter_key:
+            set_config('openrouter_key', openrouter_key)
+            changes = True
+        if gemini_key:
+            set_config('gemini_key', gemini_key)
+            changes = True
+        if groq_key:
+            set_config('groq_key', groq_key)
+            changes = True
+        if model:
+            set_config('model', model)
+            changes = True
+            
+    if changes:
+        console.print(Panel("✓ Configuration saved.", border_style="green"))
+    else:
+        console.print("[yellow]Usage:[/yellow] keel config --api-key ... --openai-key ... --model ...\nOr use --show to display current configuration.")
 
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option('--no-inject', is_flag=True, help='Skip generating injection file')
@@ -70,33 +111,37 @@ def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model):
 def run(no_inject, cmd):
     """Run an agent with injected architectural memory."""
     if not cmd:
-        click.echo("Usage: keel run <agent> [args...]")
+        console.print("Usage: keel run <agent> [args...]")
         return
         
     keel_dir = Path('.keel')
     inj_path = keel_dir / 'injection.txt'
     
     if not no_inject:
-        try:
-            ctx = click.get_current_context()
-            ctx.invoke(prepare_injection)
-        except Exception as e:
-            pass
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
+            progress.add_task(description="Preparing injection context...", total=None)
+            try:
+                ctx = click.get_current_context()
+                ctx.invoke(prepare_injection)
+            except Exception as e:
+                pass
             
     run_cmd = list(cmd)
+    agent_name = run_cmd[0].lower()
     
     if inj_path.exists() and inj_path.stat().st_size > 0:
-        agent_name = run_cmd[0].lower()
         if agent_name == 'aider':
             run_cmd.extend(['--message-file', str(inj_path)])
         elif agent_name == 'opencode':
             run_cmd.extend(['-m', inj_path.read_text()])
-        # For others, we might need specific flags, but we default to just passing it or letting the user know
+            
+    console.print(Panel(f"Launching {agent_name}...", border_style="blue", expand=False))
     
     try:
         subprocess.run(run_cmd)
+        console.print(Panel("Agent session ended.", border_style="green", expand=False))
     except FileNotFoundError:
-        click.echo(f"Command not found: {cmd[0]}", err=True)
+        console.print(f"[red]Command not found: {cmd[0]}[/red]")
 
 @cli.command()
 def extract_commit():
@@ -127,31 +172,43 @@ def extract_commit():
         if not files:
             return
 
-        db_path = str(keel_dir / 'memory.db')
-        existing = get_decisions_for_files(db_path, files, top_k=20)
-        existing_json = json.dumps(existing, indent=2)
-
-        config_data = get_all_config()
-        model = config_data.get('model', 'claude-sonnet-4-6')
-        
-        decisions = extract_decisions(diff, msg, existing_json, config_data, model)
-
-        for d in decisions:
-            event = d.get('event_type')
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
+            progress.add_task(description="Extracting decisions...", total=None)
             
-            if event == 'REINFORCE':
-                # Find matching decision to reinforce
-                match = next((e for e in existing if e['module'] == d['module'] and e['decision'] == d['decision']), None)
-                if match:
-                    reinforce_decision(db_path, match['id'], commit_hash)
+            db_path = str(keel_dir / 'memory.db')
+            existing = get_decisions_for_files(db_path, files, top_k=20)
+            existing_json = json.dumps(existing, indent=2)
+
+            config_data = get_all_config()
+            model = config_data.get('model', 'claude-sonnet-4-6')
+            
+            decisions = extract_decisions(diff, msg, existing_json, config_data, model)
+
+            new_count = 0
+            reinforced_count = 0
+
+            for d in decisions:
+                event = d.get('event_type')
+                
+                if event == 'REINFORCE':
+                    # Find matching decision to reinforce
+                    match = next((e for e in existing if e['module'] == d['module'] and e['decision'] == d['decision']), None)
+                    if match:
+                        reinforce_decision(db_path, match['id'], commit_hash)
+                        reinforced_count += 1
+                    else:
+                        d['event_type'] = 'NEW'
+                        store_decision(db_path, d)
+                        new_count += 1
+                elif event == 'CONTRADICT':
+                    did = store_decision(db_path, d)
+                    flag_decision(db_path, did)
+                    new_count += 1
                 else:
-                    d['event_type'] = 'NEW'
                     store_decision(db_path, d)
-            elif event == 'CONTRADICT':
-                did = store_decision(db_path, d)
-                flag_decision(db_path, did)
-            else:
-                store_decision(db_path, d)
+                    new_count += 1
+                    
+        console.print(f"[green]Decisions extracted: {new_count} new, {reinforced_count} reinforced[/green]")
 
     except Exception as e:
         err_log = keel_dir / 'errors.log'
@@ -170,20 +227,24 @@ def prepare_injection():
         return
         
     try:
-        files_out = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True)
-        files = [f for f in files_out.strip().split('\n') if f]
-        
-        if not files:
-            with open(keel_dir / 'injection.txt', 'w') as f:
-                f.write('')
-            return
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
+            progress.add_task(description="Preparing injection context...", total=None)
+            files_out = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True)
+            files = [f for f in files_out.strip().split('\n') if f]
             
-        db_path = str(keel_dir / 'memory.db')
-        decisions = get_decisions_for_files(db_path, files, top_k=20)
-        
-        injection = format_injection(decisions)
-        with open(keel_dir / 'injection.txt', 'w') as f:
-            f.write(injection)
+            if not files:
+                with open(keel_dir / 'injection.txt', 'w') as f:
+                    f.write('')
+                return
+                
+            db_path = str(keel_dir / 'memory.db')
+            decisions = get_decisions_for_files(db_path, files, top_k=20)
+            
+            injection = format_injection(decisions)
+            with open(keel_dir / 'injection.txt', 'w') as f:
+                f.write(injection)
+                
+        console.print("[green]Injection written to .keel/injection.txt[/green]")
             
     except Exception as e:
         with open(keel_dir / 'errors.log', 'a') as f:
@@ -198,66 +259,63 @@ def review():
     keel_dir = Path('.keel')
     db_path = keel_dir / 'memory.db'
     if not db_path.exists():
-        click.secho("keel is not initialized. Run `keel init`.", fg="red")
+        console.print("[red]keel is not initialized. Run `keel init`.[/red]")
         return
 
     db_str = str(db_path)
     flagged = get_flagged_decisions(db_str)
     
     if not flagged:
-        echo_brand("No conflicts to review.", bold=True)
+        console.print("[green bold]✓ No conflicts to review.[/green bold]")
         return
 
     for d in flagged:
-        click.echo("")
-        click.secho("! CONFLICT DETECTED", fg="red", bold=True, bg="black")
-        click.secho(f"Module: ", fg="cyan", nl=False)
-        click.secho(d['module'], fg="blue", bold=True)
+        console.print()
+        console.print(Panel(f"Module: [cyan bold]{d['module']}[/cyan bold]", title="[bold red]! CONFLICT DETECTED[/bold red]", border_style="red"))
         
         commit_ref = d.get('last_seen_commit') or "unknown commit"
-        click.secho(f"New:      ", fg="cyan", nl=False)
-        click.secho(f"\"{d['decision']}\"", fg="white", bold=True, nl=False)
-        click.secho(f" (from commit {commit_ref[:7]})", fg="cyan", dim=True)
+        new_panel = Panel(f"{d['decision']}\n\n[dim cyan](from commit {commit_ref[:7]})[/dim cyan]", title="New", border_style="cyan")
         
         active = get_active_decisions_by_module(db_str, d['module'])
         old_id = None
-        click.secho(f"Existing: ", fg="cyan", nl=False)
         if active:
             old = active[0]
             old_id = old['id']
-            click.secho(f"\"{old['decision']}\"", fg="white", nl=False)
-            click.secho(f" ({old['confidence']} confidence, x{old['reinforcement_count']})", fg="cyan", dim=True)
+            old_panel = Panel(f"{old['decision']}\n\n[dim cyan]({old['confidence']} confidence, x{old['reinforcement_count']})[/dim cyan]", title="Existing", border_style="white")
         else:
-            click.secho("(none)", fg="white")
+            old_panel = Panel("(none)", title="Existing", border_style="white")
 
-        click.echo("")
-        click.secho("[a] ", fg="green", bold=True, nl=False); click.echo("Accept new decision (archive old)")
-        click.secho("[r] ", fg="red", bold=True, nl=False); click.echo("Reject new decision (keep old, discard this finding)")
-        click.secho("[e] ", fg="yellow", bold=True, nl=False); click.echo("Edit decision manually")
-        click.secho("[s] ", fg="blue", bold=True, nl=False); click.echo("Skip for now")
+        console.print(old_panel)
+        console.print(new_panel)
+        
+        console.print(Rule(style="dim"))
+        console.print("[green bold][a][/green bold] Accept new decision (archive old)")
+        console.print("[red bold][r][/red bold] Reject new decision (keep old, discard this finding)")
+        console.print("[yellow bold][e][/yellow bold] Edit decision manually")
+        console.print("[blue bold][s][/blue bold] Skip for now")
         
         while True:
             choice = click.prompt("Choice", type=click.Choice(['a', 'r', 'e', 's']), show_choices=False).lower()
             if choice == 's':
-                click.secho("Skipped.", fg="cyan", dim=True)
+                console.print("[dim cyan]Skipped.[/dim cyan]")
                 break
             elif choice == 'a':
                 resolve_decision(db_str, d['id'], 'accept', old_id=old_id)
-                click.secho("Accepted new decision.", fg="green", bold=True)
+                console.print("[green bold]Accepted new decision.[/green bold]")
                 break
             elif choice == 'r':
                 resolve_decision(db_str, d['id'], 'reject')
-                click.secho("Rejected new decision.", fg="red", bold=True)
+                console.print("[red bold]Rejected new decision.[/red bold]")
                 break
             elif choice == 'e':
                 new_text = click.edit(d['decision'])
                 if new_text is not None:
                     new_text = new_text.strip()
                     resolve_decision(db_str, d['id'], 'edit', old_id=old_id, new_text=new_text)
-                    click.secho("Saved edited decision.", fg="yellow", bold=True)
+                    console.print("[yellow bold]Saved edited decision.[/yellow bold]")
                     break
                 else:
-                    click.secho("Edit cancelled. Please choose an option.", fg="red")
+                    console.print("[red]Edit cancelled. Please choose an option.[/red]")
 
 @cli.command()
 def status():
@@ -265,7 +323,7 @@ def status():
     keel_dir = Path('.keel')
     db_path = keel_dir / 'memory.db'
     if not db_path.exists():
-        click.secho("keel is not initialized. Run `keel init`.", fg="red")
+        console.print("[red]keel is not initialized. Run `keel init`.[/red]")
         return
 
     conn = sqlite3.connect(str(db_path))
@@ -279,42 +337,43 @@ def status():
     active = [d for d in all_decisions if d['flagged'] == 0]
     flagged = [d for d in all_decisions if d['flagged'] == 1]
 
-    click.secho("-" * 45, fg="cyan", dim=True)
-    click.secho(f"DECISIONS ", fg="cyan", bold=True, nl=False)
-    click.echo(f"({len(active)} total, {len(flagged)} flagged)\n")
+    table = Table(title="Decision Status", box=rich.box.SIMPLE, header_style="bold cyan")
+    table.add_column("ID", style="dim", max_width=8)
+    table.add_column("Decision", style="white")
+    table.add_column("Module", style="blue")
+    table.add_column("Confidence")
+    table.add_column("Event")
+    table.add_column("Reinforcements", justify="right")
+    table.add_column("Flagged", justify="center")
 
-    # Sort active by count desc
+    all_display = active + flagged
+    
+    # Sort active by count desc, then put flagged at bottom or top.
+    # Let's just sort active by reinforcements and keep flagged at the top maybe? 
+    # Or just active first, then flagged.
     active.sort(key=lambda x: x['reinforcement_count'], reverse=True)
-    
-    for d in active:
-        mod = click.style(d['module'].ljust(14), fg="blue")
-        dec = click.style(d['decision'].ljust(30), fg="white")
-        
-        conf_color = "green" if d['confidence'] == 'HIGH' else ("yellow" if d['confidence'] == 'MEDIUM' else "red")
-        conf = click.style(d['confidence'].ljust(7), fg=conf_color)
-        
-        count = click.style(f"x{d['reinforcement_count']}", fg="cyan", dim=True)
-        click.echo(f"  {mod} {dec} {conf} {count}")
+    all_display = active + flagged
 
-    if flagged:
-        click.echo("")
-        click.secho(f"! NEEDS REVIEW ({len(flagged)})", fg="yellow", bold=True)
-        for d in flagged:
-            mod = click.style(d['module'].ljust(14), fg="blue")
-            conflicts = [a for a in active if a['module'] == d['module']]
-            
-            conflict_text = ""
-            if conflicts:
-                conflict_text = click.style(f" [CONTRADICTS: {conflicts[0]['decision']}]", fg="red", dim=True)
-            
-            dec = f"{d['decision']}{conflict_text}"
-            
-            # Formatting padding accounting for color codes is annoying, so we pad manually
-            # or just let it flow since it's an error state
-            conf = click.style(d['confidence'], fg="red")
-            click.echo(f"  {mod} {dec}  {conf}")
+    for d in all_display:
+        conf_color = "green" if d['confidence'] == 'HIGH' else ("yellow" if d['confidence'] == 'MEDIUM' else "red")
+        conf_styled = f"[{conf_color}]{d['confidence']}[/{conf_color}]"
         
-        click.secho("  -> run `keel review` to resolve", fg="yellow", dim=True)
-    
-    click.secho("-" * 45, fg="cyan", dim=True)
+        is_flagged = d['flagged'] == 1
+        flag_styled = "[bold yellow]YES[/bold yellow]" if is_flagged else ""
+        
+        row_style = "bold yellow" if is_flagged else None
+        
+        table.add_row(
+            str(d['id'])[:8],
+            d['decision'],
+            d['module'],
+            conf_styled,
+            d.get('event_type', 'NEW'),
+            f"x{d['reinforcement_count']}",
+            flag_styled,
+            style=row_style
+        )
+
+    console.print(table)
+    console.print(f"[cyan]Summary:[/cyan] {len(all_decisions)} decisions, [yellow]{len(flagged)} flagged[/yellow].")
 
