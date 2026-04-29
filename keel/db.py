@@ -51,7 +51,7 @@ def get_decisions_for_files(db_path, file_list, top_k=5):
         SELECT * FROM decisions 
         WHERE flagged = 0 AND archived = 0 
         AND match_files(file_patterns, ?) = 1
-        ORDER BY (reinforcement_count * CASE confidence WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END) DESC 
+        ORDER BY (reinforcement_count * CASE confidence WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END) DESC, last_seen_commit DESC
         LIMIT ?
     ''', (file_list_str, top_k))
     
