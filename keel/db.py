@@ -113,3 +113,12 @@ def resolve_decision(db_path, decision_id, action, old_id=None, new_text=None):
         conn.execute("UPDATE decisions SET flagged = 0, confidence = 'MEDIUM', decision = ? WHERE id = ?", (new_text, decision_id))
     conn.commit()
     conn.close()
+
+def get_existing_decisions_for_files(file_paths: list[str]) -> list[dict]:
+    db_path = str(Path('.keel/memory.db').resolve())
+    if not Path(db_path).exists():
+        return []
+    decisions = get_decisions_for_files(db_path, file_paths, top_k=50)
+    high_conf = [d for d in decisions if d['confidence'] == 'HIGH']
+    return [{'id': d['id'], 'decision': d['decision']} for d in high_conf[:5]]
+
