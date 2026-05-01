@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## What this project is
-keel: a CLI tool that wraps coding agents via git hooks to inject architectural memory.
+klyde: a CLI tool that wraps coding agents via git hooks to inject architectural memory.
 
 ## Stack (frozen — do not deviate)
 - Python 3.11+
@@ -21,5 +21,5 @@ keel: a CLI tool that wraps coding agents via git hooks to inject architectural 
 - Two LLM calls per commit cycle maximum
 - No external dependencies beyond Click and anthropic SDK
 - Every function does one thing
-- Shell hooks are dumb — they call keel CLI, contain no logic themselves
+- Shell hooks are dumb — they call klyde CLI, contain no logic themselves
 - Never add a dependency to solve a problem that stdlib solves

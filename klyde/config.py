@@ -2,11 +2,11 @@ import json
 from pathlib import Path
 
 def get_config_path():
-    return Path('.keel') / 'config.json'
+    return Path('.klyde') / 'config.json'
 
 def init_config():
-    keel_dir = Path('.keel')
-    keel_dir.mkdir(exist_ok=True)
+    klyde_dir = Path('.klyde')
+    klyde_dir.mkdir(exist_ok=True)
     
     config_path = get_config_path()
     if not config_path.exists():

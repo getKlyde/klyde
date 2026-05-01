@@ -1,4 +1,4 @@
-# TASKS.md — Gated build tasks for keel
+# TASKS.md — Gated build tasks for klyde
 
 Each task has a gate. If the gate fails, do not proceed. Fix and re-run until it passes.
 Tasks build on each other. A failed gate anywhere means all downstream tasks are blocked.
@@ -10,8 +10,8 @@ Tasks build on each other. A failed gate anywhere means all downstream tasks are
 **What:** Set up the Python project structure.
 
 ```
-keel/
-├── keel/
+klyde/
+├── klyde/
 │   ├── __init__.py
 │   ├── cli.py          # Click entrypoint
 │   ├── hooks.py        # Hook install/uninstall logic
@@ -20,35 +20,35 @@ keel/
 │   ├── injector.py     # Injection formatting
 │   └── config.py       # Config read/write
 ├── hooks/
-│   ├── post-commit.sh  # POSIX shell, calls keel CLI
-│   └── pre-commit.sh   # POSIX shell, calls keel CLI
+│   ├── post-commit.sh  # POSIX shell, calls klyde CLI
+│   └── pre-commit.sh   # POSIX shell, calls klyde CLI
 ├── schema/
 │   └── v1.sql          # Initial DB schema
 ├── pyproject.toml
 └── README.md
 ```
 
-**Gate:** `python -m keel --help` runs without error and shows a help message.
+**Gate:** `python -m klyde --help` runs without error and shows a help message.
 
 ---
 
-## TASK-02 · `keel init` installs git hooks
+## TASK-02 · `klyde init` installs git hooks
 
-**What:** Implement `keel init`. It must:
+**What:** Implement `klyde init`. It must:
 - Detect `.git/` in current directory (error if not a git repo)
 - Copy `hooks/post-commit.sh` → `.git/hooks/post-commit` (chmod +x)
 - Copy `hooks/pre-commit.sh` → `.git/hooks/pre-commit` (chmod +x)
-- Create `.keel/` directory
-- Write `.keel/config.json` with empty defaults
+- Create `.klyde/` directory
+- Write `.klyde/config.json` with empty defaults
 - Print confirmation
 
-Hooks do nothing yet except `echo "keel: [hook-name] fired"`.
+Hooks do nothing yet except `echo "klyde: [hook-name] fired"`.
 
 **Gate:**
-1. Run `keel init` in a test git repo
+1. Run `klyde init` in a test git repo
 2. Make a commit
-3. See `keel: post-commit fired` in terminal output
-4. Stage a file, see `keel: pre-commit fired`
+3. See `klyde: post-commit fired` in terminal output
+4. Stage a file, see `klyde: pre-commit fired`
 5. Both fire on an aider commit (run aider, make it write one file)
 
 ---
@@ -92,13 +92,13 @@ Ranking SQL: `ORDER BY (reinforcement_count * CASE confidence WHEN 'HIGH' THEN 3
 
 ---
 
-## TASK-04 · `keel status` renders memory store
+## TASK-04 · `klyde status` renders memory store
 
-**What:** Implement `keel status` CLI command.
+**What:** Implement `klyde status` CLI command.
 
 Output format:
 ```
-keel status
+klyde status
 ───────────────────────────────────
 DECISIONS (8 total, 1 flagged)
 
@@ -108,13 +108,13 @@ DECISIONS (8 total, 1 flagged)
 
 ⚠ NEEDS REVIEW (1)
   db/            Drizzle ORM [CONTRADICTS: Prisma ORM]   LOW
-  → run `keel review` to resolve
+  → run `klyde review` to resolve
 ───────────────────────────────────
 ```
 
 **Gate:**
 1. Insert 5 decisions manually (3 normal, 1 flagged CONTRADICT, 1 LOW confidence)
-2. `keel status` output matches expected format
+2. `klyde status` output matches expected format
 3. Flagged decisions appear in NEEDS REVIEW section
 4. Archived decisions do NOT appear
 
@@ -122,10 +122,10 @@ DECISIONS (8 total, 1 flagged)
 
 ## TASK-05 · BYOK config + extractor LLM call
 
-**What:** Implement `keel config` and `extractor.py`.
+**What:** Implement `klyde config` and `extractor.py`.
 
-- `keel config --api-key sk-...` → writes to `.keel/config.json`
-- `keel config --model claude-sonnet-4-6` → writes model preference (default: claude-sonnet-4-6)
+- `klyde config --api-key sk-...` → writes to `.klyde/config.json`
+- `klyde config --model claude-sonnet-4-6` → writes model preference (default: claude-sonnet-4-6)
 - `extract_decisions(diff, commit_message, existing_decisions, api_key, model)` → list of dicts or empty list
 
 Extraction prompt (exact, do not improvise):
@@ -163,7 +163,7 @@ DIFF:
 1. Run extractor on a commit that clearly adds JWT auth → returns correct HIGH-confidence NEW decision
 2. Run extractor on a CSS formatting commit → returns `[]`
 3. Run extractor on a commit that adds a second ORM alongside existing one → returns CONTRADICT
-4. Invalid API key → error is caught, logged to `.keel/errors.log`, hook exits 0 (never block commits)
+4. Invalid API key → error is caught, logged to `.klyde/errors.log`, hook exits 0 (never block commits)
 
 ---
 
@@ -172,8 +172,8 @@ DIFF:
 **What:** Post-commit hook calls extractor and stores results.
 
 Flow:
-1. `post-commit.sh` calls `keel extract-commit`
-2. `keel extract-commit`:
+1. `post-commit.sh` calls `klyde extract-commit`
+2. `klyde extract-commit`:
    - Gets diff: `git diff HEAD~1 HEAD`
    - Gets commit message: `git log -1 --format=%B`
    - Gets list of touched files
@@ -183,13 +183,13 @@ Flow:
      - NEW → `store_decision()`
      - REINFORCE → `reinforce_decision()` on matching existing decision
      - CONTRADICT → `store_decision()` with `flagged=True`
-   - If API error → log to `.keel/errors.log`, exit silently
+   - If API error → log to `.klyde/errors.log`, exit silently
 
 **Gate:**
-1. Make a commit with clear JWT auth introduction → `keel status` shows new HIGH-confidence decision
+1. Make a commit with clear JWT auth introduction → `klyde status` shows new HIGH-confidence decision
 2. Make a second commit that reinforces same decision → reinforcement_count increments
-3. Make a commit that contradicts → flagged decision appears in NEEDS REVIEW in `keel status`
-4. Intentionally break API key → commit completes normally, error in `.keel/errors.log`
+3. Make a commit that contradicts → flagged decision appears in NEEDS REVIEW in `klyde status`
+4. Intentionally break API key → commit completes normally, error in `.klyde/errors.log`
 
 ---
 
@@ -198,17 +198,17 @@ Flow:
 **What:** Pre-commit hook retrieves relevant decisions and writes injection file.
 
 Flow:
-1. `pre-commit.sh` calls `keel prepare-injection`
-2. `keel prepare-injection`:
+1. `pre-commit.sh` calls `klyde prepare-injection`
+2. `klyde prepare-injection`:
    - Gets staged files: `git diff --cached --name-only`
    - Queries top-k decisions for those files (excludes flagged, LOW confidence unreviewed)
-   - If decisions found: writes `.keel/injection.txt` with formatted message
-   - If no decisions: writes empty `.keel/injection.txt`
-3. `keel run aider` — before starting aider, reads `.keel/injection.txt` and prepends to initial system context or first user message
+   - If decisions found: writes `.klyde/injection.txt` with formatted message
+   - If no decisions: writes empty `.klyde/injection.txt`
+3. `klyde run aider` — before starting aider, reads `.klyde/injection.txt` and prepends to initial system context or first user message
 
 Injection format (exact):
 ```
-[keel] Architectural decisions governing files in this session:
+[klyde] Architectural decisions governing files in this session:
 
 1. [auth/] JWT-only, no sessions. (HIGH confidence, confirmed 14 times)
 2. [db/] Prisma ORM exclusively. (HIGH confidence, confirmed 7 times)
@@ -220,15 +220,15 @@ Do not contradict these decisions unless the user explicitly instructs you to ch
 **Gate:**
 1. Set up project with 3 stored HIGH-confidence decisions
 2. Stage a file that touches all 3 modules
-3. Check `.keel/injection.txt` — all 3 decisions present, correct format
+3. Check `.klyde/injection.txt` — all 3 decisions present, correct format
 4. Stage a file that touches only 1 module — only that module's decision present
 5. Stage a file in a module with no decisions — injection file is empty, no errors
 
 ---
 
-## TASK-08 · `keel review` interactive resolution
+## TASK-08 · `klyde review` interactive resolution
 
-**What:** Implement `keel review` for human-in-the-loop conflict resolution.
+**What:** Implement `klyde review` for human-in-the-loop conflict resolution.
 
 For each flagged decision:
 ```
@@ -249,46 +249,46 @@ On edit: open `$EDITOR` with decision text, save and store
 
 **Gate:**
 1. Plant a CONTRADICT decision in DB manually
-2. `keel review` surfaces it correctly
-3. Accept → old decision archived, new one active in `keel status`
+2. `klyde review` surfaces it correctly
+3. Accept → old decision archived, new one active in `klyde status`
 4. Reject → new finding archived, old one unchanged
-5. After resolution, `keel status` shows 0 items in NEEDS REVIEW
+5. After resolution, `klyde status` shows 0 items in NEEDS REVIEW
 
 ---
 
 ## TASK-09 · End-to-end test on a real project
 
-**What:** Install keel on a real project (not a test fixture) and run a full cycle.
+**What:** Install klyde on a real project (not a test fixture) and run a full cycle.
 
 Use a small real project (a Python CLI or Node API you're building anyway).
 
 Steps:
-1. `keel init` + `keel config --api-key ...`
+1. `klyde init` + `klyde config --api-key ...`
 2. Make 5 commits with clear architectural decisions
-3. `keel status` — verify correct decisions captured
+3. `klyde status` — verify correct decisions captured
 4. Make a contradicting commit
-5. `keel review` — resolve it
-6. `keel run aider` — make aider do something that touches governed modules
+5. `klyde review` — resolve it
+6. `klyde run aider` — make aider do something that touches governed modules
 7. Verify aider does not contradict injected decisions without being told to
 
 **Gate:**
-The agent demonstrably behaves differently (more architecturally consistent) with keel active than without. This is qualitative but real. If you can't tell the difference, the injection isn't working.
+The agent demonstrably behaves differently (more architecturally consistent) with klyde active than without. This is qualitative but real. If you can't tell the difference, the injection isn't working.
 
 ---
 
 ## TASK-10 · Package + README + release
 
-**What:** Make keel installable by someone who wasn't in this conversation.
+**What:** Make klyde installable by someone who wasn't in this conversation.
 
-- `pyproject.toml` with correct entry point: `keel = keel.cli:main`
-- `pip install keel-harness` (or whatever name is available on PyPI)
+- `pyproject.toml` with correct entry point: `klyde = klyde.cli:main`
+- `pip install klyde-harness` (or whatever name is available on PyPI)
 - README.md: 5-minute quickstart only. No theory. No architecture docs.
   ```
-  # keel
-  install → keel init → keel config --api-key sk-... → keel run aider
+  # klyde
+  install → klyde init → klyde config --api-key sk-... → klyde run aider
   ```
 - GitHub repo: MIT license, open issues enabled
-- `.keel/` added to `.gitignore` template (don't commit the memory store)
+- `.klyde/` added to `.gitignore` template (don't commit the memory store)
 
 **Gate:**
-Fresh machine, fresh virtual env. `pip install keel-harness`, `keel init`, `keel config`, `keel run aider` — works in under 5 minutes. Decisions populate after 3 commits. `keel status` shows correct state.
+Fresh machine, fresh virtual env. `pip install klyde-harness`, `klyde init`, `klyde config`, `klyde run aider` — works in under 5 minutes. Decisions populate after 3 commits. `klyde status` shows correct state.

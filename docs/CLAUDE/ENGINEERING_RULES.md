@@ -1,4 +1,4 @@
-# ENGINEERING_RULES.md — Non-negotiable constraints for building keel
+# ENGINEERING_RULES.md — Non-negotiable constraints for building klyde
 
 ## Language & Stack
 
@@ -27,25 +27,25 @@
 - Conservative extraction, aggressive human review
 
 ### Rule 4: CONTRADICT decisions never auto-inject
-- If the extractor classifies a finding as CONTRADICT, it is flagged in `keel status`
+- If the extractor classifies a finding as CONTRADICT, it is flagged in `klyde status`
 - It is never injected into an agent session until a human accepts or resolves it
 - This is the primary guard against self-reinforcing errors
 
 ### Rule 5: Injection is a user-turn message, not a system prompt
 - Proven by OpenDev research: user messages get higher recency position and compliance
-- System prompt is used only for session-level context at `keel run` startup
+- System prompt is used only for session-level context at `klyde run` startup
 - Per-write injection always goes as a user message
 
-### Rule 6: All state lives in `.keel/` inside the repo
-- `.keel/memory.db` — SQLite decision store
-- `.keel/config.json` — API key reference, model choice, settings
-- `.keel/hooks/` — installed git hook scripts
+### Rule 6: All state lives in `.klyde/` inside the repo
+- `.klyde/memory.db` — SQLite decision store
+- `.klyde/config.json` — API key reference, model choice, settings
+- `.klyde/hooks/` — installed git hook scripts
 - Nothing leaves the local machine without explicit user action
 
 ### Rule 7: No magic defaults for confidence
 - Confidence (LOW/MEDIUM/HIGH) comes from the LLM's own output in the extraction call
-- keel does not infer or override confidence — it records what the extractor returns
-- If extractor returns no confidence field → default to LOW, surface in `keel status`
+- klyde does not infer or override confidence — it records what the extractor returns
+- If extractor returns no confidence field → default to LOW, surface in `klyde status`
 
 ### Rule 8: Module tags, not just file paths
 - Every decision is tagged with the module it *governs*, not just the file it came from
@@ -56,12 +56,12 @@
 - Decisions are never deleted automatically
 - Ranking for injection: `recency_score × confidence_weight × reinforcement_count`
 - Decisions not reinforced in 30+ commits naturally fall out of top-k
-- Human can manually archive via `keel review`
+- Human can manually archive via `klyde review`
 
 ### Rule 10: The spec is a view, not the source of truth
-- `keel status` can render a human-readable SPEC.md from the memory store
+- `klyde status` can render a human-readable SPEC.md from the memory store
 - But SPEC.md is generated output, not input
-- Source of truth is always `.keel/memory.db`
+- Source of truth is always `.klyde/memory.db`
 
 ## Extraction Prompt Rules
 
@@ -88,7 +88,7 @@ The extraction prompt is load-bearing. These rules govern it:
 - Every function that calls the LLM is clearly named `extract_*` or `inject_*`
 - Database schema migrations are versioned in `schema/v{n}.sql`
 - All git hook scripts are POSIX shell, not Python — maximum portability
-- Hooks call into the keel Python CLI, they don't contain logic themselves
+- Hooks call into the klyde Python CLI, they don't contain logic themselves
 
 ## What Stays Out Of MVP
 

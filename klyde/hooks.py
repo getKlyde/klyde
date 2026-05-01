@@ -36,5 +36,5 @@ def uninstall_hooks():
     git_hooks_dir = git_dir / 'hooks'
     for hook in ['post-commit', 'pre-commit']:
         dest = git_hooks_dir / hook
-        if dest.exists() and "keel" in dest.read_text():
+        if dest.exists() and "klyde" in dest.read_text():
             dest.unlink()

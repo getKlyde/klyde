@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "keel"
+name = "klyde"
 version = "0.1.0"
 description = "A CLI tool that wraps coding agents via git hooks to inject architectural memory."
 readme = "README.md"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["keel", "keel.*"]
+include = ["klyde", "klyde.*"]
 
 [project.scripts]
-keel = "keel.cli:cli"
+kl = "klyde.cli:cli"

@@ -16,7 +16,7 @@ import rich.box
 
 console = Console()
 
-class KeelGroup(click.Group):
+class KlydeGroup(click.Group):
     def format_help(self, ctx, formatter):
         console.print()
         console.print(r"[cyan]   / ___        ___          ___         //  [/cyan]")
@@ -26,30 +26,30 @@ class KeelGroup(click.Group):
         console.print()
         super().format_help(ctx, formatter)
 
-@click.group(cls=KeelGroup)
+@click.group(cls=KlydeGroup)
 def cli():
-    """keel: a CLI tool that wraps coding agents via git hooks to inject architectural memory."""
+    """klyde: a CLI tool that wraps coding agents via git hooks to inject architectural memory."""
     pass
 
 def echo_brand(msg, bold=False):
-    console.print(f"[cyan bold]keel[/cyan bold] | {msg}")
+    console.print(f"[cyan bold]klyde[/cyan bold] | {msg}")
 
 @cli.command()
 def init():
-    """Initialize keel in the current git repository."""
+    """Initialize klyde in the current git repository."""
     try:
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
-            progress.add_task(description="Creating .keel directory, database, and hooks...", total=None)
+            progress.add_task(description="Creating .klyde directory, database, and hooks...", total=None)
             install_hooks()
             init_config()
             # Init DB as well
-            keel_dir = Path('.keel')
-            db_path = keel_dir / 'memory.db'
+            klyde_dir = Path('.klyde')
+            db_path = klyde_dir / 'memory.db'
             from .db import init_db
             init_db(str(db_path))
             
         console.print(Panel(
-            "✓ Keel harness initialised in [cyan].keel[/cyan]\n\n[dim]Installed git hooks for automatic extraction.[/dim]\n[dim]Errors are logged to .keel/errors.log[/dim]",
+            "✓ Klyde harness initialised in [cyan].klyde[/cyan]\n\n[dim]Installed git hooks for automatic extraction.[/dim]\n[dim]Errors are logged to .klyde/errors.log[/dim]",
             title="Success", border_style="green"
         ))
     except Exception as e:
@@ -65,10 +65,10 @@ def init():
 @click.option('--model', help='Model to use (default: claude-sonnet-4-6)')
 @click.option('--show', is_flag=True, help='Show current configuration')
 def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, show):
-    """Set keel configuration."""
+    """Set klyde configuration."""
     if show:
         cfg = get_all_config()
-        table = Table(title="Keel Configuration", box=rich.box.SIMPLE)
+        table = Table(title="Klyde Configuration", box=rich.box.SIMPLE)
         table.add_column("Key", style="cyan")
         table.add_column("Value", style="green")
         for k, v in cfg.items():
@@ -103,7 +103,7 @@ def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, sho
     if changes:
         console.print(Panel("✓ Configuration saved.", border_style="green"))
     else:
-        console.print("[yellow]Usage:[/yellow] keel config --api-key ... --openai-key ... --model ...\nOr use --show to display current configuration.")
+        console.print("[yellow]Usage:[/yellow] klyde config --api-key ... --openai-key ... --model ...\nOr use --show to display current configuration.")
 
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option('--no-inject', is_flag=True, help='Skip generating injection file')
@@ -111,11 +111,11 @@ def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, sho
 def run(no_inject, cmd):
     """Run an agent with injected architectural memory."""
     if not cmd:
-        console.print("Usage: keel run <agent> [args...]")
+        console.print("Usage: klyde run <agent> [args...]")
         return
         
-    keel_dir = Path('.keel')
-    inj_path = keel_dir / 'injection.txt'
+    klyde_dir = Path('.klyde')
+    inj_path = klyde_dir / 'injection.txt'
     
     if not no_inject:
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
@@ -149,8 +149,8 @@ def extract_commit():
     from .extractor import extract_decisions
     from .db import get_decisions_for_files, store_decision, reinforce_decision, flag_decision
     
-    keel_dir = Path('.keel')
-    if not (keel_dir / 'memory.db').exists():
+    klyde_dir = Path('.klyde')
+    if not (klyde_dir / 'memory.db').exists():
         return
         
     try:
@@ -175,7 +175,7 @@ def extract_commit():
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
             progress.add_task(description="Extracting decisions...", total=None)
             
-            db_path = str(keel_dir / 'memory.db')
+            db_path = str(klyde_dir / 'memory.db')
             existing = get_decisions_for_files(db_path, files, top_k=20)
             existing_json = json.dumps(existing, indent=2)
 
@@ -211,7 +211,7 @@ def extract_commit():
         console.print(f"[green]Decisions extracted: {new_count} new, {reinforced_count} reinforced[/green]")
 
     except Exception as e:
-        err_log = keel_dir / 'errors.log'
+        err_log = klyde_dir / 'errors.log'
         with open(err_log, 'a') as f:
             f.write(f"Error extracting commit:\n{traceback.format_exc()}\n")
         return
@@ -222,8 +222,8 @@ def prepare_injection():
     from .db import get_decisions_for_files
     from .injector import format_injection
     
-    keel_dir = Path('.keel')
-    if not (keel_dir / 'memory.db').exists():
+    klyde_dir = Path('.klyde')
+    if not (klyde_dir / 'memory.db').exists():
         return
         
     try:
@@ -233,21 +233,21 @@ def prepare_injection():
             files = [f for f in files_out.strip().split('\n') if f]
             
             if not files:
-                with open(keel_dir / 'injection.txt', 'w') as f:
+                with open(klyde_dir / 'injection.txt', 'w') as f:
                     f.write('')
                 return
                 
-            db_path = str(keel_dir / 'memory.db')
+            db_path = str(klyde_dir / 'memory.db')
             decisions = get_decisions_for_files(db_path, files, top_k=20)
             
             injection = format_injection(decisions)
-            with open(keel_dir / 'injection.txt', 'w') as f:
+            with open(klyde_dir / 'injection.txt', 'w') as f:
                 f.write(injection)
                 
-        console.print("[green]Injection written to .keel/injection.txt[/green]")
+        console.print("[green]Injection written to .klyde/injection.txt[/green]")
             
     except Exception as e:
-        with open(keel_dir / 'errors.log', 'a') as f:
+        with open(klyde_dir / 'errors.log', 'a') as f:
             f.write(f"Error preparing injection:\n{traceback.format_exc()}\n")
         return
 
@@ -256,10 +256,10 @@ def review():
     """Review flagged conflicting decisions."""
     from .db import get_flagged_decisions, get_active_decisions_by_module, resolve_decision
     
-    keel_dir = Path('.keel')
-    db_path = keel_dir / 'memory.db'
+    klyde_dir = Path('.klyde')
+    db_path = klyde_dir / 'memory.db'
     if not db_path.exists():
-        console.print("[red]keel is not initialized. Run `keel init`.[/red]")
+        console.print("[red]klyde is not initialized. Run `klyde init`.[/red]")
         return
 
     db_str = str(db_path)
@@ -320,10 +320,10 @@ def review():
 @cli.command()
 def status():
     """Show the current memory store status."""
-    keel_dir = Path('.keel')
-    db_path = keel_dir / 'memory.db'
+    klyde_dir = Path('.klyde')
+    db_path = klyde_dir / 'memory.db'
     if not db_path.exists():
-        console.print("[red]keel is not initialized. Run `keel init`.[/red]")
+        console.print("[red]klyde is not initialized. Run `klyde init`.[/red]")
         return
 
     conn = sqlite3.connect(str(db_path))

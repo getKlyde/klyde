@@ -1,4 +1,4 @@
-# PROMPTING_TEMPLATE.md — Resume keel development fast
+# PROMPTING_TEMPLATE.md — Resume klyde development fast
 
 Copy the relevant block. Do not paste the whole file.
 
@@ -7,7 +7,7 @@ Copy the relevant block. Do not paste the whole file.
 ## BLOCK A · Starting a new task
 
 ```
-I'm building keel — a decision memory harness for terminal coding agents (aider, opencode).
+I'm building klyde — a decision memory harness for terminal coding agents (aider, opencode).
 
 Core mechanic: git hooks intercept commits → LLM extracts architectural decisions → stored in local SQLite → injected as user-turn messages before file writes.
 
@@ -27,7 +27,7 @@ Let's build it.
 ## BLOCK B · Debugging a failing gate
 
 ```
-I'm building keel. Working on TASK-[N].
+I'm building klyde. Working on TASK-[N].
 
 Gate is failing. Here's what's happening:
 
@@ -48,7 +48,7 @@ Fix only the failing behavior. Don't refactor anything else.
 ## BLOCK C · Resuming after a break (no context)
 
 ```
-I'm building keel — a git-hook-based architectural decision memory layer for aider/opencode.
+I'm building klyde — a git-hook-based architectural decision memory layer for aider/opencode.
 
 State:
 - Completed tasks: TASK-01 through TASK-[N]
@@ -56,12 +56,12 @@ State:
 - All gates up to TASK-[N] are passing
 
 Key files:
-- keel/db.py — SQLite interface (decisions table, store/get/reinforce/flag/archive)
-- keel/extractor.py — LLM extraction call
-- keel/injector.py — injection formatting
-- keel/cli.py — Click CLI (init, config, status, review, run, extract-commit, prepare-injection)
-- hooks/post-commit.sh — calls `keel extract-commit`
-- hooks/pre-commit.sh — calls `keel prepare-injection`
+- klyde/db.py — SQLite interface (decisions table, store/get/reinforce/flag/archive)
+- klyde/extractor.py — LLM extraction call
+- klyde/injector.py — injection formatting
+- klyde/cli.py — Click CLI (init, config, status, review, run, extract-commit, prepare-injection)
+- hooks/post-commit.sh — calls `klyde extract-commit`
+- hooks/pre-commit.sh — calls `klyde prepare-injection`
 
 [paste current task's What + Gate from TASKS.md]
 
@@ -73,7 +73,7 @@ Key files:
 ## BLOCK D · Asking for a design decision
 
 ```
-I'm building keel (decision memory harness for coding agents).
+I'm building klyde (decision memory harness for coding agents).
 
 Constraint: [relevant rule from ENGINEERING_RULES.md — paste it]
 
