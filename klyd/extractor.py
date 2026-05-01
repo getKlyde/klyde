@@ -8,10 +8,15 @@ def _call_openai_compatible(url, key, model, prompt):
         "model": model,
         "messages": [{"role": "user", "content": prompt}]
     }).encode('utf-8')
-    req = urllib.request.Request(url, data=data, headers={
+    headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json"
-    })
+    }
+    if "openrouter.ai" in url:
+        headers["HTTP-Referer"] = "https://github.com/getKlyd/klyd"
+        headers["X-Title"] = "klyd"
+        
+    req = urllib.request.Request(url, data=data, headers=headers)
     with urllib.request.urlopen(req) as response:
         res = json.loads(response.read().decode('utf-8'))
         return res['choices'][0]['message']['content']
