@@ -1,4 +1,4 @@
-# CONTEXT.md — What klyde is and why it exists
+# CONTEXT.md — What klyd is and why it exists
 
 ## The Problem
 
@@ -20,9 +20,9 @@ This is not a model quality problem. It is a **memory and context architecture p
 - After ~40 turns, goal drift sets in. The original intent has slid fully into the middle graveyard. The agent is solving a different problem and doesn't know it.
 - Context rot compounds this: performance degrades non-linearly as context grows. More context is often worse, not better.
 
-## What klyde is
+## What klyd is
 
-**klyde is a decision memory layer that wraps any terminal coding agent.**
+**klyd is a decision memory layer that wraps any terminal coding agent.**
 
 It is not a coding agent. It does not write code. It is the harness that makes other agents reliable by giving them persistent, structured memory of architectural decisions across all sessions.
 
@@ -34,7 +34,7 @@ Because file writes are when architectural damage happens, not when conversation
 
 ### Core components
 
-**1. Decision Memory Store** (`.klyde/memory.db` — local SQLite, no infra)
+**1. Decision Memory Store** (`.klyd/memory.db` — local SQLite, no infra)
 
 Stores extracted architectural decisions from every commit:
 - `decision`: what was decided
@@ -57,7 +57,7 @@ Classifies each finding as NEW, REINFORCE, or CONTRADICT.
 
 **3. Pre-write Injector** (git hook, fires before file write is committed)
 
-Queries `.klyde/memory.db` for decisions relevant to the files being touched.
+Queries `.klyd/memory.db` for decisions relevant to the files being touched.
 
 Ranking: recency × confidence × reinforcement_count → top-k selected.
 
@@ -65,18 +65,18 @@ Injects as a user-turn message (not system prompt — proven higher compliance) 
 
 Injection format: `"The following architectural decisions govern this module. Do not contradict unless explicitly instructed: [decisions]"`
 
-**4. `klyde status`** (human-in-the-loop, like `git status`)
+**4. `klyd status`** (human-in-the-loop, like `git status`)
 
 Surfaces: LOW confidence decisions, CONFLICT decisions pending review.
 
 Developer accepts / rejects / edits in ~30 seconds. Not a daily chore. Occasional sanity check.
 
-### What klyde is NOT
+### What klyd is NOT
 
 - Not a GUI tool
 - Not a vibe-coder tool (that is a future mode, not MVP)
 - Not a coding agent
-- Not a cloud service — all state lives in `.klyde/` inside the repo
+- Not a cloud service — all state lives in `.klyd/` inside the repo
 - Not an AGENTS.md / CLAUDE.md replacement — it wraps those, it is deeper
 
 ## Target User
@@ -88,7 +88,7 @@ Terminal users who already use aider, opencode, or claude code. They type comman
 ## Key Design Constraints
 
 - BYOK (bring your own key) — zero infra cost to maintain
-- All state local to the repo (`.klyde/` directory)
+- All state local to the repo (`.klyd/` directory)
 - Two LLM calls per commit cycle maximum
 - No vector DB on day one — file path + module tag matching only
 - Open-core: harness is MIT licensed, intelligence layer (drift scoring, team memory sync) is future closed layer
@@ -96,6 +96,6 @@ Terminal users who already use aider, opencode, or claude code. They type comman
 
 ## Name
 
-**klyde** — the structural spine of a ship. Without it, the ship drifts and capsizes. Invisible to the user, everything depends on it.
+**klyd** — the structural spine of a ship. Without it, the ship drifts and capsizes. Invisible to the user, everything depends on it.
 
-CLI verbs: `klyde init` · `klyde status` · `klyde run [agent]` · `klyde review`
+CLI verbs: `klyd init` · `klyd status` · `klyd run [agent]` · `klyd review`

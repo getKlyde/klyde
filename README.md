@@ -15,7 +15,7 @@
 ```
 </center>
 
-install → klyde init → klyde config --api-key sk-... → klyde run aider
+install → klyd init → klyd config --api-key sk-... → klyd run aider
 
 ## Quickstart
 
@@ -25,26 +25,26 @@ pip install .
 
 # 2. Initialize in your repo
 cd your-project
-klyde init
+klyd init
 
 # 3. Configure an API Key
 # Anthropic (Default)
-klyde config --api-key sk-ant-...
+klyd config --api-key sk-ant-...
 
 # OR OpenAI
-klyde config --openai-key sk-proj-... --model gpt-4o
+klyd config --openai-key sk-proj-... --model gpt-4o
 
 # OR OpenRouter
-klyde config --openrouter-key sk-or-... --model openrouter/auto
+klyd config --openrouter-key sk-or-... --model openrouter/auto
 
 # OR Gemini
-klyde config --gemini-key AIza... --model gemini-1.5-pro
+klyd config --gemini-key AIza... --model gemini-1.5-pro
 
 # OR Groq
-klyde config --groq-key gsk_... --model llama3-8b-8192
+klyd config --groq-key gsk_... --model llama3-8b-8192
 
 # 4. Use your agent as normal
-klyde run aider
+klyd run aider
 ```
 
-Decisions will automatically populate after you make commits. Review flagged contradictions using `klyde review`. Check current status with `klyde status`.
+Decisions will automatically populate after you make commits. Review flagged contradictions using `klyd review`. Check current status with `klyd status`.

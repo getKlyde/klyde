@@ -3,7 +3,7 @@ def format_injection(decisions):
         return ""
 
     lines = [
-        "[klyde] Architectural decisions governing files in this session:\n"
+        "[klyd] Architectural decisions governing files in this session:\n"
     ]
     
     for i, d in enumerate(decisions, 1):

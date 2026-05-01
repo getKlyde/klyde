@@ -125,7 +125,7 @@ Changes to be committed:
 
 Untracked files:
   (use "git add <file>..." to include in what will be committed)
-	.klyde/
+	.klyd/
 	test.db
 
 
@@ -176,7 +176,7 @@ I'm currently grappling with how to best commit recent changes. My parent reposi
 
 **Deciding Commit Strategy**
 
-I'm weighing the best approach for committing. Since both my parent repository and the submodule are on `master`, and the submodule has new files (`.klyde/`, `test.db`), I need to decide whether to include these in the submodule commit before committing the parent and pushing to `main`.
+I'm weighing the best approach for committing. Since both my parent repository and the submodule are on `master`, and the submodule has new files (`.klyd/`, `test.db`), I need to decide whether to include these in the submodule commit before committing the parent and pushing to `main`.
 
 
 
@@ -276,13 +276,13 @@ My investigation into PowerShell 5.1's `&&` limitation led me to adopt `; if ($?
 
 **Output:**
 ```
-klyde: pre-commit fired
-klyde: post-commit fired
+klyd: pre-commit fired
+klyd: post-commit fired
 [master 684dcd9] Add auth, test scripts, and configurations
  6 files changed, 10 insertions(+)
- create mode 100644 .klyde/config.json
- create mode 100644 .klyde/injection.txt
- create mode 100644 .klyde/memory.db
+ create mode 100644 .klyd/config.json
+ create mode 100644 .klyd/injection.txt
+ create mode 100644 .klyd/memory.db
  create mode 100644 auth/auth.py
  create mode 100644 test.db
  create mode 100644 test.py
@@ -317,8 +317,8 @@ I've just executed the command to add and commit the parent repository, specific
 
 **Output:**
 ```
-klyde: pre-commit fired
-klyde: post-commit fired
+klyd: pre-commit fired
+klyd: post-commit fired
 [master 0699bbf] Update test_repo submodule
  1 file changed, 1 insertion(+), 1 deletion(-)
 
@@ -354,9 +354,9 @@ My focus has shifted to executing the requested push of the `master` branch to t
 ```
 remote: 
 remote: Create a pull request for 'main' on GitHub by visiting:        
-remote:      https://github.com/getKlyde/klyde/pull/new/main        
+remote:      https://github.com/getKlyd/klyd/pull/new/main        
 remote: 
-To https://github.com/getKlyde/klyde.git
+To https://github.com/getKlyd/klyd.git
  * [new branch]      master -> main
 
 ```
@@ -385,7 +385,7 @@ Here's a breakdown of what was done:
 3. Pushed the local `master` branch up to the remote `main` branch. 
 
 You can view the new branch and create a pull request on GitHub here:
-[https://github.com/getKlyde/klyde/pull/new/main](https://github.com/getKlyde/klyde/pull/new/main)
+[https://github.com/getKlyd/klyd/pull/new/main](https://github.com/getKlyd/klyd/pull/new/main)
 
 ---
 

@@ -1,4 +1,4 @@
-# ENGINEERING_RULES.md — Non-negotiable constraints for building klyde
+# ENGINEERING_RULES.md — Non-negotiable constraints for building klyd
 
 ## Language & Stack
 
@@ -27,25 +27,25 @@
 - Conservative extraction, aggressive human review
 
 ### Rule 4: CONTRADICT decisions never auto-inject
-- If the extractor classifies a finding as CONTRADICT, it is flagged in `klyde status`
+- If the extractor classifies a finding as CONTRADICT, it is flagged in `klyd status`
 - It is never injected into an agent session until a human accepts or resolves it
 - This is the primary guard against self-reinforcing errors
 
 ### Rule 5: Injection is a user-turn message, not a system prompt
 - Proven by OpenDev research: user messages get higher recency position and compliance
-- System prompt is used only for session-level context at `klyde run` startup
+- System prompt is used only for session-level context at `klyd run` startup
 - Per-write injection always goes as a user message
 
-### Rule 6: All state lives in `.klyde/` inside the repo
-- `.klyde/memory.db` — SQLite decision store
-- `.klyde/config.json` — API key reference, model choice, settings
-- `.klyde/hooks/` — installed git hook scripts
+### Rule 6: All state lives in `.klyd/` inside the repo
+- `.klyd/memory.db` — SQLite decision store
+- `.klyd/config.json` — API key reference, model choice, settings
+- `.klyd/hooks/` — installed git hook scripts
 - Nothing leaves the local machine without explicit user action
 
 ### Rule 7: No magic defaults for confidence
 - Confidence (LOW/MEDIUM/HIGH) comes from the LLM's own output in the extraction call
-- klyde does not infer or override confidence — it records what the extractor returns
-- If extractor returns no confidence field → default to LOW, surface in `klyde status`
+- klyd does not infer or override confidence — it records what the extractor returns
+- If extractor returns no confidence field → default to LOW, surface in `klyd status`
 
 ### Rule 8: Module tags, not just file paths
 - Every decision is tagged with the module it *governs*, not just the file it came from
@@ -56,12 +56,12 @@
 - Decisions are never deleted automatically
 - Ranking for injection: `recency_score × confidence_weight × reinforcement_count`
 - Decisions not reinforced in 30+ commits naturally fall out of top-k
-- Human can manually archive via `klyde review`
+- Human can manually archive via `klyd review`
 
 ### Rule 10: The spec is a view, not the source of truth
-- `klyde status` can render a human-readable SPEC.md from the memory store
+- `klyd status` can render a human-readable SPEC.md from the memory store
 - But SPEC.md is generated output, not input
-- Source of truth is always `.klyde/memory.db`
+- Source of truth is always `.klyd/memory.db`
 
 ## Extraction Prompt Rules
 
@@ -88,7 +88,7 @@ The extraction prompt is load-bearing. These rules govern it:
 - Every function that calls the LLM is clearly named `extract_*` or `inject_*`
 - Database schema migrations are versioned in `schema/v{n}.sql`
 - All git hook scripts are POSIX shell, not Python — maximum portability
-- Hooks call into the klyde Python CLI, they don't contain logic themselves
+- Hooks call into the klyd Python CLI, they don't contain logic themselves
 
 ## What Stays Out Of MVP
 

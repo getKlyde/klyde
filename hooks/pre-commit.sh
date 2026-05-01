@@ -1,2 +1,2 @@
 #!/bin/sh
-kl prepare-injection >> .klyde/errors.log 2>&1 || true
+kl prepare-injection >> .klyd/errors.log 2>&1 || true

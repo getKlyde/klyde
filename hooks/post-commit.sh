@@ -1,2 +1,2 @@
 #!/bin/sh
-kl extract-commit >> .klyde/errors.log 2>&1 &
+kl extract-commit >> .klyd/errors.log 2>&1 &

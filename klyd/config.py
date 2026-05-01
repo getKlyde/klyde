@@ -2,11 +2,11 @@ import json
 from pathlib import Path
 
 def get_config_path():
-    return Path('.klyde') / 'config.json'
+    return Path('.klyd') / 'config.json'
 
 def init_config():
-    klyde_dir = Path('.klyde')
-    klyde_dir.mkdir(exist_ok=True)
+    klyd_dir = Path('.klyd')
+    klyd_dir.mkdir(exist_ok=True)
     
     config_path = get_config_path()
     if not config_path.exists():
