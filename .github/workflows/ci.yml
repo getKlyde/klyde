@@ -24,6 +24,6 @@ jobs:
       - name: Install tools
         run: python -m pip install --upgrade pip ruff build
       - name: Lint
-        run: ruff check klyd --select F --extend-ignore F401,F841
+        run: ruff check klyd --select F
       - name: Build
         run: python -m build
