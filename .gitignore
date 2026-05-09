@@ -6,3 +6,4 @@ keel-test/
 .output.txt
 .pytest_cache/
 __pycache__/
+.env
