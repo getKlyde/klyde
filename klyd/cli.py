@@ -15,7 +15,11 @@ from rich.rule import Rule
 from rich.columns import Columns
 from rich.prompt import Prompt
 from rich.text import Text
+from rich.tree import Tree
+from rich.markdown import Markdown
 import rich.box
+import io
+import datetime
 
 console = Console()
 
@@ -134,6 +138,102 @@ def _format_diff(old_text: str, new_text: str) -> str:
         else:
             result_lines.append(f"[dim]{old_trunc}[/dim] | [dim]{new_trunc}[/dim]")
     return '\n'.join(result_lines)
+
+# ----------------------------------------------------------------------
+# Status helpers
+# ----------------------------------------------------------------------
+
+def _compute_stats(active, flagged):
+    total = len(active) + len(flagged)
+    conflict_rate = len(flagged) / total if total > 0 else 0.0
+    # drift_score: average of (1 - recency) for active decisions? For simplicity, use conflict_rate
+    drift_score = conflict_rate
+    return {
+        'total': total,
+        'active': len(active),
+        'flagged': len(flagged),
+        'conflict_rate': conflict_rate,
+        'drift_score': drift_score
+    }
+
+def _build_module_tree(decisions, pinned_ids):
+    """Build a rich Tree grouped by module."""
+    tree = Tree("[bold cyan]Decisions by Module[/bold cyan]")
+    modules = {}
+    for d in decisions:
+        mod = d['module']
+        if mod not in modules:
+            modules[mod] = []
+        modules[mod].append(d)
+    
+    for mod in sorted(modules.keys()):
+        mod_node = tree.add(f"[bold blue]{mod}[/bold blue]")
+        for d in modules[mod]:
+            conf_color = "bold bright_green" if d['confidence'] == 'HIGH' else ("bold bright_yellow" if d['confidence'] == 'MEDIUM' else "dim white")
+            id_str = str(d['id'])
+            if d['id'] in pinned_ids:
+                id_str = f"📌 {id_str}"
+            decision_text = d['decision'][:60] + '...' if len(d['decision']) > 60 else d['decision']
+            mod_node.add(f"[{conf_color}]{id_str}: {decision_text}[/{conf_color}]")
+    return tree
+
+def _export_status(active, flagged, stats, format_type):
+    """Export status in the requested format."""
+    if format_type == 'json':
+        data = {
+            'stats': stats,
+            'active_decisions': active,
+            'flagged_decisions': flagged
+        }
+        return json.dumps(data, indent=2)
+    elif format_type == 'markdown':
+        lines = []
+        lines.append("# klyd Status\n")
+        lines.append(f"**Total decisions:** {stats['total']}  ")
+        lines.append(f"**Active:** {stats['active']}  ")
+        lines.append(f"**Flagged:** {stats['flagged']}  ")
+        lines.append(f"**Conflict rate:** {stats['conflict_rate']:.2%}  ")
+        lines.append(f"**Drift score:** {stats['drift_score']:.2%}  ")
+        lines.append("")
+        lines.append("## Active Decisions")
+        lines.append("")
+        lines.append("| ID | Decision | Module | Confidence | Reinforcements |")
+        lines.append("|----|----------|--------|------------|----------------|")
+        for d in active:
+            lines.append(f"| {d['id']} | {d['decision'][:60]} | {d['module']} | {d['confidence']} | {d['reinforcement_count']} |")
+        if flagged:
+            lines.append("")
+            lines.append("## Flagged Decisions (Needs Review)")
+            lines.append("")
+            lines.append("| ID | Decision | Module | Confidence |")
+            lines.append("|----|----------|--------|------------|")
+            for d in flagged:
+                lines.append(f"| {d['id']} | {d['decision'][:60]} | {d['module']} | {d['confidence']} |")
+        return '\n'.join(lines)
+    elif format_type == 'html':
+        lines = []
+        lines.append("<html><head><title>klyd Status</title></head><body>")
+        lines.append("<h1>klyd Status</h1>")
+        lines.append(f"<p><b>Total decisions:</b> {stats['total']}</p>")
+        lines.append(f"<p><b>Active:</b> {stats['active']}</p>")
+        lines.append(f"<p><b>Flagged:</b> {stats['flagged']}</p>")
+        lines.append(f"<p><b>Conflict rate:</b> {stats['conflict_rate']:.2%}</p>")
+        lines.append(f"<p><b>Drift score:</b> {stats['drift_score']:.2%}</p>")
+        lines.append("<h2>Active Decisions</h2>")
+        lines.append("<table border='1'><tr><th>ID</th><th>Decision</th><th>Module</th><th>Confidence</th><th>Reinforcements</th></tr>")
+        for d in active:
+            lines.append(f"<tr><td>{d['id']}</td><td>{d['decision'][:60]}</td><td>{d['module']}</td><td>{d['confidence']}</td><td>{d['reinforcement_count']}</td></tr>")
+        lines.append("</table>")
+        if flagged:
+            lines.append("<h2>Flagged Decisions (Needs Review)</h2>")
+            lines.append("<table border='1'><tr><th>ID</th><th>Decision</th><th>Module</th><th>Confidence</th></tr>")
+            for d in flagged:
+                lines.append(f"<tr><td>{d['id']}</td><td>{d['decision'][:60]}</td><td>{d['module']}</td><td>{d['confidence']}</td></tr>")
+            lines.append("</table>")
+        lines.append("</body></html>")
+        return '\n'.join(lines)
+    else:
+        return ""
 
 # ----------------------------------------------------------------------
 # CLI commands
@@ -663,7 +763,11 @@ def review():
                 break
 
 @cli.command()
-def status():
+@click.option('--search', default=None, help='Search keyword to filter decisions')
+@click.option('--tree', is_flag=True, help='Show tree view by module')
+@click.option('--format', 'format_type', type=click.Choice(['table', 'tree', 'markdown', 'html', 'json']), default='table', help='Output format')
+@click.option('--stats', is_flag=True, help='Show drift/conflict stats')
+def status(search, tree, format_type, stats):
     """Show the current memory store status."""
     klyd_dir = Path('.klyd')
     db_path = klyd_dir / 'memory.db'
@@ -679,11 +783,54 @@ def status():
     all_decisions = [dict(r) for r in cur.fetchall()]
     conn.close()
 
+    # Apply search filter
+    if search:
+        search_lower = search.lower()
+        all_decisions = [d for d in all_decisions if search_lower in d['decision'].lower() or search_lower in d['module'].lower()]
+
     active = [d for d in all_decisions if d['flagged'] == 0]
     flagged = [d for d in all_decisions if d['flagged'] == 1]
     
     active.sort(key=lambda x: x['reinforcement_count'], reverse=True)
 
+    pinned_ids = get_pinned_decision_ids()
+
+    # Compute stats
+    stats_data = _compute_stats(active, flagged)
+
+    # If --stats flag is set, show stats panel
+    if stats:
+        stats_panel = Panel(
+            f"[bold]Total decisions:[/bold] {stats_data['total']}\n"
+            f"[bold]Active:[/bold] {stats_data['active']}\n"
+            f"[bold]Flagged:[/bold] {stats_data['flagged']}\n"
+            f"[bold]Conflict rate:[/bold] {stats_data['conflict_rate']:.2%}\n"
+            f"[bold]Drift score:[/bold] {stats_data['drift_score']:.2%}",
+            title="[bold cyan]Memory Stats[/bold cyan]",
+            border_style="cyan",
+            expand=False
+        )
+        console.print(stats_panel)
+        console.print()
+
+    # Handle export formats
+    if format_type in ('markdown', 'html', 'json'):
+        export_text = _export_status(active, flagged, stats_data, format_type)
+        if format_type == 'markdown':
+            console.print(Markdown(export_text))
+        elif format_type == 'html':
+            console.print(export_text)
+        elif format_type == 'json':
+            console.print(export_text)
+        return
+
+    # If --tree flag is set, show tree view
+    if tree or format_type == 'tree':
+        tree_view = _build_module_tree(all_decisions, pinned_ids)
+        console.print(tree_view)
+        return
+
+    # Default table view
     table = Table(box=rich.box.SIMPLE, header_style="bold cyan", show_edge=False, padding=(0, 2))
     table.add_column("ID", style="dim", max_width=8)
     table.add_column("Decision", style="white")
@@ -691,8 +838,6 @@ def status():
     table.add_column("Confidence")
     table.add_column("Event")
     table.add_column("Reinforcements", justify="right")
-
-    pinned_ids = get_pinned_decision_ids()
 
     for d in active:
         conf_color = "bold bright_green" if d['confidence'] == 'HIGH' else ("bold bright_yellow" if d['confidence'] == 'MEDIUM' else "dim white")
