@@ -2,9 +2,10 @@ import click
 import subprocess
 import json
 import traceback
+import urllib.request
 from .hooks import install_hooks
 from .config import init_config, set_config, get_config, get_all_config
-from .db import get_schema_path, migrate_db
+from .db import get_schema_path, migrate_db, get_decision_by_id, create_decision_version, merge_decisions, auto_archive_old_decisions
 import sqlite3
 from pathlib import Path
 from rich.console import Console
@@ -30,6 +31,113 @@ def cli():
 
 def echo_brand(msg, bold=False):
     console.print(f"[cyan bold]klyd[/cyan bold] | {msg}")
+
+# ----------------------------------------------------------------------
+# LLM helper for merge suggestions
+# ----------------------------------------------------------------------
+
+def _call_llm_for_merge(old_decision: str, new_decision: str, config_data: dict) -> str:
+    """Call the configured LLM to propose a unified decision."""
+    prompt = f"""You are an architectural decision merger. You have two conflicting decisions about the same module.
+
+Old decision:
+{old_decision}
+
+New decision:
+{new_decision}
+
+Propose a single unified decision that combines the best of both, resolving any contradictions.
+Return ONLY the unified decision text, no explanation, no markdown, no JSON.
+"""
+    model = config_data.get('model', 'claude-sonnet-4-6')
+    is_anthropic_model = model.startswith('claude-') or model.startswith('anthropic/')
+    
+    try:
+        if is_anthropic_model and 'api_key' in config_data and not any(k in config_data for k in ['openai_key', 'openrouter_key', 'gemini_key', 'groq_key']):
+            from anthropic import Anthropic
+            client = Anthropic(api_key=config_data['api_key'])
+            actual_model = model.replace('anthropic/', '')
+            response = client.messages.create(
+                model=actual_model,
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+        elif is_anthropic_model and 'openrouter_key' in config_data:
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            key = config_data['openrouter_key']
+        else:
+            if model.startswith('gpt-') or model.startswith('o1') or model.startswith('o3'):
+                if 'openai_key' not in config_data:
+                    raise ValueError("OpenAI API key missing.")
+                url = "https://api.openai.com/v1/chat/completions"
+                key = config_data['openai_key']
+            elif model.startswith('gemini-') or model.startswith('gemma-'):
+                if 'gemini_key' not in config_data:
+                    raise ValueError("Gemini API key missing.")
+                url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                key = config_data['gemini_key']
+            elif '/' in model:
+                if 'openrouter_key' not in config_data:
+                    raise ValueError("OpenRouter API key missing.")
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                key = config_data['openrouter_key']
+            elif config_data.get('groq_key'):
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                key = config_data['groq_key']
+            elif config_data.get('openai_key'):
+                url = "https://api.openai.com/v1/chat/completions"
+                key = config_data['openai_key']
+            elif config_data.get('openrouter_key'):
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                key = config_data['openrouter_key']
+            else:
+                raise ValueError(f"No valid API key configured for model: {model}")
+            
+            data = json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}]
+            }).encode('utf-8')
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
+            }
+            if "openrouter.ai" in url:
+                headers["HTTP-Referer"] = "https://github.com/getKlyd/klyd"
+                headers["X-Title"] = "klyd"
+            req = urllib.request.Request(url, data=data, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                res = json.loads(response.read().decode('utf-8'))
+                return res['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        console.print(f"[red]LLM merge suggestion failed: {e}[/red]")
+        return None
+
+# ----------------------------------------------------------------------
+# Diff display helper
+# ----------------------------------------------------------------------
+
+def _format_diff(old_text: str, new_text: str) -> str:
+    """Create a simple side-by-side diff representation."""
+    old_lines = old_text.split('\n')
+    new_lines = new_text.split('\n')
+    max_len = max(len(old_lines), len(new_lines))
+    result_lines = []
+    for i in range(max_len):
+        old_line = old_lines[i] if i < len(old_lines) else ''
+        new_line = new_lines[i] if i < len(new_lines) else ''
+        # Truncate to 40 chars for side-by-side
+        old_trunc = old_line[:40] if len(old_line) > 40 else old_line.ljust(40)
+        new_trunc = new_line[:40] if len(new_line) > 40 else new_line.ljust(40)
+        if old_line != new_line:
+            result_lines.append(f"[red]{old_trunc}[/red] | [green]{new_trunc}[/green]")
+        else:
+            result_lines.append(f"[dim]{old_trunc}[/dim] | [dim]{new_trunc}[/dim]")
+    return '\n'.join(result_lines)
+
+# ----------------------------------------------------------------------
+# CLI commands
+# ----------------------------------------------------------------------
 
 @cli.command()
 def init():
@@ -279,7 +387,7 @@ def prepare_injection(relevance_mode):
 
 @cli.command()
 def review():
-    """Review flagged conflicting decisions."""
+    """Review flagged conflicting decisions with enhanced conflict resolution."""
     from .db import get_flagged_decisions, get_active_decisions_by_module, resolve_decision
     
     klyd_dir = Path('.klyd')
@@ -298,6 +406,8 @@ def review():
         ))
         return
 
+    config_data = get_all_config()
+
     for i, d in enumerate(flagged):
         console.print()
         console.print(f"[bold cyan]Conflict {i+1} of {len(flagged)}[/bold cyan] in module: [bold white]{d['module']}[/bold white]")
@@ -306,9 +416,11 @@ def review():
         
         active = get_active_decisions_by_module(db_str, d['module'])
         old_id = None
+        old_decision_text = ""
         if active:
             old = active[0]
             old_id = old['id']
+            old_decision_text = old['decision']
             conf_color = "bold bright_green" if old['confidence'] == 'HIGH' else ("bold bright_yellow" if old['confidence'] == 'MEDIUM' else "dim white")
             old_panel = Panel(
                 f"{old['decision']}\n\n[dim]([/dim][{conf_color}]{old['confidence']}[/{conf_color}][dim] | reinforced x{old['reinforcement_count']})[/dim]",
@@ -334,28 +446,69 @@ def review():
 
         console.print(Columns([old_panel, new_panel]))
         
+        # Show side-by-side diff
         console.print()
-        console.print("  [bold green][ a ][/bold green] Accept new (archive old)    [bold red][ r ][/bold red] Reject new (keep old)")
-        console.print("  [bold yellow][ e ][/bold yellow] Edit manually               [bold blue][ s ][/bold blue] Skip for now")
+        console.print("[bold cyan]Side-by-side diff:[/bold cyan]")
+        diff_text = _format_diff(old_decision_text, d['decision'])
+        console.print(Panel(diff_text, title="[bold]Old | New[/bold]", border_style="blue", expand=False))
+        
+        console.print()
+        console.print("  [bold green][ a ][/bold green] Accept+Merge (LLM suggests unified decision)")
+        console.print("  [bold yellow][ o ][/bold yellow] ArchiveOld+AcceptNew (keep new, archive old)")
+        console.print("  [bold blue][ e ][/bold blue] ManualEdit (edit the new decision)")
+        console.print("  [bold red][ r ][/bold red] Reject new (keep old)")
+        console.print("  [bold magenta][ w ][/bold magenta] AutoArchiveWeak (archive old if weak confidence)")
+        console.print("  [bold dim][ s ][/bold dim] Skip for now")
         console.print()
         
         while True:
-            choice = Prompt.ask("[bold cyan]Select action[/bold cyan]", choices=["a", "r", "e", "s"], show_choices=False).lower()
+            choice = Prompt.ask("[bold cyan]Select action[/bold cyan]", choices=["a", "o", "e", "r", "w", "s"], show_choices=False).lower()
             if choice == 's':
                 console.print("[dim]Skipped.[/dim]")
                 break
             elif choice == 'a':
+                # Accept+Merge: call LLM to suggest unified decision
+                with console.status("[bold cyan]Asking LLM to suggest a merge...[/bold cyan]", spinner="dots12"):
+                    merged_text = _call_llm_for_merge(old_decision_text, d['decision'], config_data)
+                if merged_text:
+                    console.print(Panel(
+                        f"[bold green]LLM suggests:[/bold green]\n{merged_text}",
+                        title="[bold]Merge Suggestion[/bold]",
+                        border_style="green",
+                        expand=False
+                    ))
+                    confirm = Prompt.ask("[bold cyan]Accept this merge?[/bold cyan]", choices=["y", "n"], default="y")
+                    if confirm == 'y':
+                        # Create a new version from the old decision with the merged text
+                        new_version_id = create_decision_version(db_str, old_id, {
+                            'decision': merged_text,
+                            'confidence': 'MEDIUM',
+                            'event_type': 'NEW',
+                            'last_seen_commit': d.get('last_seen_commit')
+                        })
+                        # Archive the old decision
+                        merge_decisions(db_str, new_version_id, old_id)
+                        # Archive the new conflicting decision
+                        merge_decisions(db_str, new_version_id, d['id'])
+                        console.print(Panel(
+                            "[bold green]Merged decision created. Old and conflicting decisions archived.[/bold green]",
+                            border_style="green", expand=False
+                        ))
+                        break
+                    else:
+                        console.print("[dim]Merge cancelled. Choose another option.[/dim]")
+                        continue
+                else:
+                    console.print("[red]LLM merge failed. Please choose another option.[/red]")
+                    continue
+            elif choice == 'o':
+                # ArchiveOld+AcceptNew
+                if old_id:
+                    merge_decisions(db_str, d['id'], old_id)
                 resolve_decision(db_str, d['id'], 'accept', old_id=old_id)
                 console.print(Panel(
-                    "[bold green]Accepted new decision. Memory updated.[/bold green]",
-                    border_style="green", expand=False
-                ))
-                break
-            elif choice == 'r':
-                resolve_decision(db_str, d['id'], 'reject')
-                console.print(Panel(
-                    "[bold red]Rejected new decision. Existing memory preserved.[/bold red]",
-                    border_style="red", expand=False
+                    "[bold yellow]Old decision archived. New decision accepted.[/bold yellow]",
+                    border_style="yellow", expand=False
                 ))
                 break
             elif choice == 'e':
@@ -364,12 +517,37 @@ def review():
                     new_text = new_text.strip()
                     resolve_decision(db_str, d['id'], 'edit', old_id=old_id, new_text=new_text)
                     console.print(Panel(
-                        "[bold yellow]Saved edited decision. Memory updated.[/bold yellow]",
-                        border_style="yellow", expand=False
+                        "[bold blue]Saved edited decision. Memory updated.[/bold blue]",
+                        border_style="blue", expand=False
                     ))
                     break
                 else:
                     console.print("[red]Edit cancelled. Please choose an option.[/red]")
+            elif choice == 'r':
+                resolve_decision(db_str, d['id'], 'reject')
+                console.print(Panel(
+                    "[bold red]Rejected new decision. Existing memory preserved.[/bold red]",
+                    border_style="red", expand=False
+                ))
+                break
+            elif choice == 'w':
+                # AutoArchiveWeak: archive old if its confidence is LOW
+                if old_id:
+                    old_decision = get_decision_by_id(db_str, old_id)
+                    if old_decision and old_decision['confidence'] == 'LOW':
+                        merge_decisions(db_str, d['id'], old_id)
+                        resolve_decision(db_str, d['id'], 'accept', old_id=old_id)
+                        console.print(Panel(
+                            "[bold magenta]Old decision (LOW confidence) archived. New decision accepted.[/bold magenta]",
+                            border_style="magenta", expand=False
+                        ))
+                    else:
+                        console.print("[yellow]Old decision confidence is not LOW. Skipping auto-archive.[/yellow]")
+                        continue
+                else:
+                    console.print("[yellow]No old decision to archive.[/yellow]")
+                    continue
+                break
 
 @cli.command()
 def status():
