@@ -4,7 +4,7 @@ import json
 import traceback
 import urllib.request
 from .hooks import install_hooks
-from .config import init_config, set_config, get_config, get_all_config, get_injection_template, set_injection_template, get_strict_mode, set_strict_mode, get_pinned_decision_ids, add_pinned_decision_id, remove_pinned_decision_id, clear_pinned_decision_ids, get_max_decisions_inject, set_max_decisions_inject
+from .config import init_config, set_config, get_config, get_all_config, get_injection_template, set_injection_template, get_strict_mode, set_strict_mode, get_pinned_decision_ids, add_pinned_decision_id, remove_pinned_decision_id, clear_pinned_decision_ids, get_max_decisions_inject, set_max_decisions_inject, get_min_confidence, set_min_confidence, get_module_filter, set_module_filter
 from .db import get_schema_path, migrate_db, get_decision_by_id, create_decision_version, merge_decisions, auto_archive_old_decisions
 import sqlite3
 from pathlib import Path
@@ -183,7 +183,9 @@ def init():
 @click.option('--injection-template', help='Custom injection template with {decisions} placeholder')
 @click.option('--strict-mode', type=bool, help='Enable strict mode (only file-matched decisions)')
 @click.option('--max-decisions', type=int, help='Maximum number of decisions to inject')
-def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, show, injection_template, strict_mode, max_decisions):
+@click.option('--min-confidence', type=click.Choice(['LOW', 'MEDIUM', 'HIGH']), help='Minimum confidence level to include')
+@click.option('--module-filter', help='Comma-separated list of modules to include')
+def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, show, injection_template, strict_mode, max_decisions, min_confidence, module_filter):
     """Set klyd configuration."""
     if show:
         cfg = get_all_config()
@@ -229,11 +231,18 @@ def config(api_key, openai_key, openrouter_key, gemini_key, groq_key, model, sho
         if max_decisions is not None:
             set_max_decisions_inject(max_decisions)
             changes = True
+        if min_confidence is not None:
+            set_min_confidence(min_confidence)
+            changes = True
+        if module_filter is not None:
+            modules = [m.strip() for m in module_filter.split(',') if m.strip()]
+            set_module_filter(modules)
+            changes = True
             
     if changes:
         console.print(Panel("[bold green]Configuration saved successfully[/bold green]", title="[bold green]DONE[/bold green]", border_style="green", expand=False))
     else:
-        console.print("[yellow]Usage:[/yellow] kl config --api-key ... --openai-key ... --model ... --injection-template ... --strict-mode ... --max-decisions ...\nOr use --show to display current configuration.")
+        console.print("[yellow]Usage:[/yellow] kl config --api-key ... --openai-key ... --model ... --injection-template ... --strict-mode ... --max-decisions ... --min-confidence ... --module-filter ...\nOr use --show to display current configuration.")
 
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option('--no-inject', is_flag=True, help='Skip generating injection file')
@@ -354,7 +363,10 @@ def extract_commit():
 
 @cli.command()
 @click.option('--relevance-mode', type=click.Choice(['balanced', 'strict']), default='balanced', help='Relevance scoring mode')
-def prepare_injection(relevance_mode):
+@click.option('--min-confidence', type=click.Choice(['LOW', 'MEDIUM', 'HIGH']), default=None, help='Minimum confidence level')
+@click.option('--module-filter', default=None, help='Comma-separated list of modules to include')
+@click.option('--template', default=None, help='Custom injection template')
+def prepare_injection(relevance_mode, min_confidence, module_filter, template):
     """Prepare injection file for agent sessions."""
     from .db import get_decisions_for_files
     from .injector import format_injection
@@ -376,16 +388,23 @@ def prepare_injection(relevance_mode):
             db_path = str(klyd_dir / 'memory.db')
             decisions = get_decisions_for_files(db_path, files, top_k=20)
             
-            # Get task description from git commit message? For now, use None.
-            # In future, could be passed via --message flag.
             task_description = None
+            
+            # Parse module_filter
+            module_list = None
+            if module_filter:
+                module_list = [m.strip() for m in module_filter.split(',') if m.strip()]
             
             injection = format_injection(
                 decisions,
                 db_path=db_path,
                 task_description=task_description,
                 relevance_mode=relevance_mode,
-                top_k=None  # will use config default
+                top_k=None,
+                template=template,
+                min_confidence=min_confidence,
+                module_filter=module_list,
+                preview=False
             )
             with open(klyd_dir / 'injection.txt', 'w') as f:
                 f.write(injection)
@@ -399,7 +418,10 @@ def prepare_injection(relevance_mode):
 
 @cli.command()
 @click.option('--relevance-mode', type=click.Choice(['balanced', 'strict']), default='balanced', help='Relevance scoring mode')
-def preview_injection(relevance_mode):
+@click.option('--min-confidence', type=click.Choice(['LOW', 'MEDIUM', 'HIGH']), default=None, help='Minimum confidence level')
+@click.option('--module-filter', default=None, help='Comma-separated list of modules to include')
+@click.option('--template', default=None, help='Custom injection template')
+def preview_injection(relevance_mode, min_confidence, module_filter, template):
     """Preview the injection file without writing it."""
     from .db import get_decisions_for_files
     from .injector import format_injection
@@ -423,20 +445,21 @@ def preview_injection(relevance_mode):
             
             task_description = None
             
+            module_list = None
+            if module_filter:
+                module_list = [m.strip() for m in module_filter.split(',') if m.strip()]
+            
             injection = format_injection(
                 decisions,
                 db_path=db_path,
                 task_description=task_description,
                 relevance_mode=relevance_mode,
-                top_k=None
+                top_k=None,
+                template=template,
+                min_confidence=min_confidence,
+                module_filter=module_list,
+                preview=True
             )
-            
-        console.print(Panel(
-            injection,
-            title="[bold cyan]Injection Preview[/bold cyan]",
-            border_style="cyan",
-            expand=False
-        ))
             
     except Exception as e:
         console.print(f"[red]Error generating preview: {e}[/red]")
