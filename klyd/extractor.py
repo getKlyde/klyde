@@ -47,12 +47,13 @@ Rules:
 - IMPORTANT: A NEW decision should be recorded when the commit introduces a different architectural choice than previously recorded, even if both are in the same project. For example: first commit uses Click, second commit adds SQLite - these are NEW decisions about different architectural choices (CLI framework, database). Only classify as REINFORCE if the commit explicitly confirms or repeats the SAME decision (e.g., adding another Click-based command).
 - For each decision, classify as NEW (new architectural choice), REINFORCE (confirms SAME existing decision), or CONTRADICT (conflicts with an existing decision)
 - Assign confidence: HIGH (unmistakable from diff), MEDIUM (clear but could have context), LOW (possible but uncertain)
-- If this commit contradicts any of the listed invariants, set event_type to 'CONTRADICT' and add a note in the 'decision' field describing the violation. Otherwise, proceed with NEW or REINFORCE as before.
+- If this commit contradicts any of the listed invariants, set event_type to 'CONTRADICT' and add a note in the 'decision' field describing the violation. Also provide a "resolution_suggestion" field with a short sentence on how to resolve the conflict (e.g., "Use the new approach and archive the old one" or "Merge both approaches by ...").
 - For each decision, also provide a short dense "semantic_summary" (one sentence) that captures the essence of the decision. This will be used for semantic similarity search.
 
 Return ONLY valid JSON. No prose. No markdown. No explanation.
 - The 'decision' field must contain the exact architectural rule or invariant written in the diff, quoted verbatim if possible. Do not summarise module responsibilities. For example, prefer 'Authentication uses JWT access tokens exclusively; no server-side sessions' over 'Authentication is handled by auth.py'.
-Schema: [{{"decision": str, "module": str, "file_patterns": str, "confidence": "LOW"|"MEDIUM"|"HIGH", "event": "NEW"|"REINFORCE"|"CONTRADICT", "semantic_summary": str}}]
+- If event_type is CONTRADICT, include a "resolution_suggestion" field.
+Schema: [{{"decision": str, "module": str, "file_patterns": str, "confidence": "LOW"|"MEDIUM"|"HIGH", "event": "NEW"|"REINFORCE"|"CONTRADICT", "semantic_summary": str, "resolution_suggestion": str (only if event is CONTRADICT)}}]
 If no decisions: return []
 
 EXISTING DECISIONS FOR TOUCHED FILES:
@@ -127,8 +128,16 @@ Existing architectural invariants (do not violate unless explicitly instructed):
             summary = r.get('semantic_summary', r.get('decision', ''))
             # Compute embedding from the semantic summary
             emb_bytes = compute_embedding(summary)
+            
+            decision_text = r.get('decision', 'Unknown')
+            # If CONTRADICT and resolution_suggestion is provided, append it to the decision text
+            if event_val == 'CONTRADICT':
+                resolution = r.get('resolution_suggestion')
+                if resolution:
+                    decision_text = f"{decision_text} [Resolution: {resolution}]"
+            
             normalized.append({
-                'decision': r.get('decision', 'Unknown'),
+                'decision': decision_text,
                 'module': r.get('module', '/'),
                 'file_patterns': r.get('file_patterns', '*'),
                 'confidence': r.get('confidence', 'LOW'),
