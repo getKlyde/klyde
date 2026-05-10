@@ -10,5 +10,8 @@ CREATE TABLE decisions (
     created_at TEXT DEFAULT (datetime('now')),
     flagged INTEGER DEFAULT 0,        -- 1 = needs human review
     archived INTEGER DEFAULT 0,        -- 1 = soft-deleted
+    embedding BLOB DEFAULT NULL,       -- vector embedding for semantic similarity
+    last_reinforced_at TEXT DEFAULT NULL, -- timestamp of last reinforcement
+    relevance_score REAL DEFAULT 0.0,   -- computed relevance score
     UNIQUE(decision, module)
 );

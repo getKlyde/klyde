@@ -4,7 +4,7 @@ import json
 import traceback
 from .hooks import install_hooks
 from .config import init_config, set_config, get_config, get_all_config
-from .db import get_schema_path
+from .db import get_schema_path, migrate_db
 import sqlite3
 from pathlib import Path
 from rich.console import Console
@@ -53,6 +53,8 @@ def init():
             db_path = klyd_dir / 'memory.db'
             from .db import init_db
             init_db(str(db_path))
+            # Migration is called inside init_db, but call again for safety
+            migrate_db(str(db_path))
             
         console.print(Panel(
             "Klyd harness initialised in [cyan].klyd[/cyan]\n\n[dim]Installed git hooks for automatic extraction.[/dim]\n[dim]Errors are logged to .klyd/errors.log[/dim]",
