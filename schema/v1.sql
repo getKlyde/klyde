@@ -1,5 +1,5 @@
 CREATE TABLE decisions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     decision TEXT NOT NULL,
     module TEXT NOT NULL,
     file_patterns TEXT NOT NULL,      -- comma-separated glob patterns
