@@ -156,7 +156,7 @@ def run(no_inject, cmd):
 def extract_commit():
     """Extract decisions from the last commit."""
     from .extractor import extract_decisions
-    from .db import get_decisions_for_files, store_decision, reinforce_decision, flag_decision
+    from .db import get_decisions_for_files, store_decision_with_embedding, reinforce_decision, flag_decision
     
     klyd_dir = Path('.klyd')
     if not (klyd_dir / 'memory.db').exists():
@@ -194,6 +194,7 @@ def extract_commit():
             for d in decisions:
                 event = d.get('event_type')
                 d['last_seen_commit'] = commit_hash
+                emb_bytes = d.pop('embedding_bytes', None)
                 
                 if event == 'REINFORCE':
                     match = next((e for e in existing if e['module'] == d['module'] and e['decision'] == d['decision']), None)
@@ -202,14 +203,14 @@ def extract_commit():
                         reinforced_count += 1
                     else:
                         d['event_type'] = 'NEW'
-                        store_decision(db_path, d)
+                        store_decision_with_embedding(db_path, d, embedding_bytes=emb_bytes)
                         new_count += 1
                 elif event == 'CONTRADICT':
-                    did = store_decision(db_path, d)
+                    did = store_decision_with_embedding(db_path, d, embedding_bytes=emb_bytes)
                     flag_decision(db_path, did)
                     new_count += 1
                 else:
-                    store_decision(db_path, d)
+                    store_decision_with_embedding(db_path, d, embedding_bytes=emb_bytes)
                     new_count += 1
                     
         if new_count > 0 or reinforced_count > 0:

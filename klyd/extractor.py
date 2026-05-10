@@ -1,7 +1,7 @@
 import json
 import urllib.request
 from anthropic import Anthropic
-from .db import get_existing_decisions_for_files
+from .db import get_existing_decisions_for_files, compute_embedding
 
 def _call_openai_compatible(url, key, model, prompt):
     data = json.dumps({
@@ -48,10 +48,11 @@ Rules:
 - For each decision, classify as NEW (new architectural choice), REINFORCE (confirms SAME existing decision), or CONTRADICT (conflicts with an existing decision)
 - Assign confidence: HIGH (unmistakable from diff), MEDIUM (clear but could have context), LOW (possible but uncertain)
 - If this commit contradicts any of the listed invariants, set event_type to 'CONTRADICT' and add a note in the 'decision' field describing the violation. Otherwise, proceed with NEW or REINFORCE as before.
+- For each decision, also provide a short dense "semantic_summary" (one sentence) that captures the essence of the decision. This will be used for semantic similarity search.
 
 Return ONLY valid JSON. No prose. No markdown. No explanation.
 - The 'decision' field must contain the exact architectural rule or invariant written in the diff, quoted verbatim if possible. Do not summarise module responsibilities. For example, prefer 'Authentication uses JWT access tokens exclusively; no server-side sessions' over 'Authentication is handled by auth.py'.
-Schema: [{{"decision": str, "module": str, "file_patterns": str, "confidence": "LOW"|"MEDIUM"|"HIGH", "event": "NEW"|"REINFORCE"|"CONTRADICT"}}]
+Schema: [{{"decision": str, "module": str, "file_patterns": str, "confidence": "LOW"|"MEDIUM"|"HIGH", "event": "NEW"|"REINFORCE"|"CONTRADICT", "semantic_summary": str}}]
 If no decisions: return []
 
 EXISTING DECISIONS FOR TOUCHED FILES:
@@ -123,12 +124,16 @@ Existing architectural invariants (do not violate unless explicitly instructed):
         normalized = []
         for r in result:
             event_val = r.get('event') or r.get('event_type') or 'NEW'
+            summary = r.get('semantic_summary', r.get('decision', ''))
+            # Compute embedding from the semantic summary
+            emb_bytes = compute_embedding(summary)
             normalized.append({
                 'decision': r.get('decision', 'Unknown'),
                 'module': r.get('module', '/'),
                 'file_patterns': r.get('file_patterns', '*'),
                 'confidence': r.get('confidence', 'LOW'),
-                'event_type': event_val
+                'event_type': event_val,
+                'embedding_bytes': emb_bytes
             })
             
         return normalized
